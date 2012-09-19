@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config agentPort="10190" masterIp="192.168.1.243" masterPort="9999">	
+    <!-- type 0-网关服 1-登录服 2-游戏服 -->
+	<server id="10" name="腾讯测试服" category="1" jar="TxSgGame.jar" vindicateJar="TxSgGame_Vindicate.jar" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="tx_game" statDb="tx_game_stat" path="/home/tx/game/" type="2"/>
+    <server id="11" name="fake游戏服" category="1" jar="TxSgGameX.jar" vindicateJar="TxSgGameX_Vindicate.jar" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="tx_game" statDb="tx_game_stat" path="/home/tx/xgame" type="2"/>
+    <server id="15" name="腾讯版登录服" category="1" jar="TxSgLogin.jar" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="tx_login" statDb="tx_login_stat" path="/home/tx/login" type="1"/>
+    <server id="20" name="清合测试1" category="2" jar="SgGame1.jar" vindicateJar="xxxx" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="" statDb="" path="/home/project/SG_Game1" type="2"/>
+    <server id="21" name="清合测试2" category="2" jar="SgGame2.jar" vindicateJar="yyyyy" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="" statDb="" path="/home/project/SG_Game2" type="2"/>
+    <server id="25" name="清合登录服" category="2" jar="CRSgLogin.jar" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="" statDb="" path="/home/project/SG_Login" type="1"/>   
+</config>
