@@ -3,6 +3,9 @@
 import subprocess
 import threading
 import os
+import sys
+import datetime
+import logging
 
 import pyinotify
 
@@ -31,6 +34,7 @@ class AppServer:
         self.status = status
         self.configStatus = configStatus
         self.error = False
+        self.logger = logging.getLogger("agent.app")
         if pid <= 0:
             #清空输出文件
             subprocess.Popen('cat /dev/null > ' + os.path.join(self.path, 'app.out'), cwd=self.path, stdout=None, shell=True)
@@ -95,6 +99,25 @@ class AppServer:
         cmd = "grep -B 5 -A 30 'Exception' " + os.path.join(self.path, 'app.out')
         output = subprocess.check_output(["/bin/bash", "-c", cmd])
         return output
+
+    def updateApp(self, binary):
+        '''更新应用'''
+        result = SUCCESS
+        try:
+            #先备份原程序        
+            appendSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S.')  # 默认文件备份后缀
+            fileName = self.jar.split(".")[0]
+            fileSuffix = self.jar.split(".")[-1]
+            bak = fileName + appendSuffix + fileSuffix        
+            os.rename(os.path.join(self.path, self.jar), os.path.join(self.path, bak))        
+            f = open(os.path.join(self.path, self.jar), "wb")
+            f.write(binary.data)
+            f.close()
+        except:
+            result = FAIL
+            self.logger.error("update app for 【%s】 failed: %s", self.name, str(sys.exc_info()[1]))
+        return result
+        
 
 ###################################
 

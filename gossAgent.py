@@ -28,8 +28,8 @@ agentPort = 10190
 #中控配置
 masterIp = None
 masterPort = 9999
-#分类
-categoryMap = {}
+#应用部署路径
+appPath = os.path.dirname(os.path.abspath(__file__))
 #应用服
 appServerMap = {}
 #应用部署路径
@@ -325,34 +325,15 @@ class Agent:
         else:
             return gs.switchSyncConfig(configStatus)
 
-    def updateApp(self, id):
+    def updateApps(self, appIdList, fileName, binary):
         '''更新程序'''
-        gs = appServerMap.get(id)
-        if gs is None:
-            return SERVER_NOT_EXIST
-        else:
-            if request.method == 'GET':
-                return render_template('jar.html', gs=gs)
-            else:
-                f = request.files['jar']
-                if not f:
-                    return render_template('jar.html', gs=gs, errorMsg='请上传一个需要更新的程序包')
-                else:
-                    if not f.filename.endswith('.jar'):
-                        return render_template('jar.html', gs=gs, errorMsg="请传jar包")
-                    else:
-                        try:
-                            #先备份原程序
-                            os.chdir(gs.path)
-                            appendSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S.')  # 默认文件备份后缀
-                            fileName = gs.jar.split(".")[0]
-                            fileSuffix = gs.jar.split(".")[-1]
-                            bak = fileName + appendSuffix + fileSuffix
-                            os.rename(gs.jar, bak)
-                            f.save(os.path.join(gs.path, gs.jar))
-                        except:
-                            return render_template('jar.html', gs=gs, errorMsg="<font color=\"red\">" + str(sys.exc_info()[0]) + str(sys.exc_info()[1]) + "</font><br/>")
-                        return render_template('jar.html', gs=gs, successMsg="更新成功")
+        result = []
+        logger.info("update app %s with [%s]", appIdList, fileName)
+        for id in appIdList:
+            app = appServerMap.get(id)
+            logger.info("update 【%d-%s】 with [%s]", app.id, app.name, fileName)
+            result.append((id, app.updateApp(binary)))
+        return (agentIp, result)                             
 
 
 if __name__ == '__main__':
@@ -368,6 +349,7 @@ if __name__ == '__main__':
     server.register_function(agent.vindicate, "vindicate")
     server.register_function(agent.getConsoleLog, "getConsoleLog")
     server.register_function(agent.switchSyncConfig, "switchSyncConfig")
+    server.register_function(agent.updateApps, "updateApps")
     try:
         server.serve_forever()
     except KeyboardInterrupt:        
