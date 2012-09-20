@@ -7,6 +7,7 @@ goss代理
 import os
 import sys
 import time
+import datetime
 import subprocess
 import socket
 import re
@@ -14,6 +15,8 @@ import logging
 import xml.dom.minidom
 import threading
 import base64
+import hashlib
+import shutil
 import xmlrpclib
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
@@ -75,6 +78,118 @@ def registerToMaster(client):
             logger.error("registerToMaster retry after 30 seconds...")
             time.sleep(30)
 
+
+def hashFile(filePath):
+    '''
+    计算指定文件路径的hash值
+    '''
+    if os.path.exists(filePath) and os.path.isfile(filePath):
+        sha1obj = hashlib.sha1()
+        f = open(filePath)
+        try:
+            for line in f:
+                sha1obj.update(line)
+        finally:
+            f.close()
+        '''
+        with open(filePath, 'rb') as f:
+            sha1obj = hashlib.sha1()
+            sha1obj.update(f.read())
+        '''
+    return sha1obj.hexdigest()
+
+
+def wrapperUpdateGameScript(srcPath, appIdList, isDeleteScript=False):
+    '''更新脚本文件'''
+    #格式：[(应用编号, 需要更新的脚本数, 成功更新的脚本数),]
+    result = []
+    #初始化需要更新的脚本列表
+    scripts = []
+    log = "--------------- 初始化需要更新的脚本列表 ---------------"
+    logger.info(log)
+    logs = log + "<br/>"
+    for f in os.listdir(srcPath):
+        if os.path.isfile(os.path.join(srcPath, f)):
+            logger.info(f)
+            logs += str(f) + "<br/>"
+            scripts.append(f)
+    log = "--------------- 总计有" + str(len(scripts)) + "个脚本需要更新 -----------------"
+    logger.info(log)
+    logs += log + "<br/>"
+    appendSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S.')  # 默认文件备份后缀
+    #循环更新指定游戏服脚本
+    for id in appIdList:
+        gs = appServerMap[id]
+        log = "----------- 更新【" + gs.name + "】脚本 ---------------"
+        logger.info(log)
+        logs += log + "<br/>" 
+        updateResult = updateScript(srcPath, scripts, gs.name, os.path.join(gs.path, 'data'), appendSuffix)
+        result.append((id, len(scripts), updateResult[0]))
+        logs += updateResult[1]
+    if isDeleteScript:
+        #删除更新成功的脚本
+        log = "--------------- 删除更新成功的脚本 ---------------"
+        logger.info(log)
+        logs += log + "<br/>"
+        for script in scripts:
+            os.remove(srcPath + os.sep + script)
+            logger.info("delete " + srcPath + os.sep + script)
+            logs += "delete " + srcPath + os.sep + script + "<br/>"
+        log = "------------- 更新成功的脚本清除完毕 -------------"
+        logger.info(log)
+        logs += log + "<br/>"
+    log = "============= 脚本更新完成 ==============="
+    logger.info(log)
+    logs += log
+    #响应格式：([(应用编号, 需要更新的脚本数, 成功更新的脚本数),], 更新日志)    
+    return (result, logs)
+
+
+def updateScript(srcPath, scripts, gameServer, path, appendSuffix):
+    '''
+    更新脚本
+    <参数>
+            srcPath:更新源位置
+            scripts:脚本列表
+            gameServer:游戏服名
+            path:游戏服data文件夹路径，如/home/project/game1/data
+            appendSuffix:备份文件名后缀，一般为日期+时间
+    <返回值>
+            result:更新日志
+    '''
+    successCount = 0
+    result = ""
+    for dirpath, dirnames, filenames in os.walk(path):
+        for filename in filenames:
+                    #如果待更新的文件中有该文件则进行文件(hash)比较
+            if filename in scripts:
+                srcLastTime = time.strftime('%Y-%m-%d %X', time.localtime(os.path.getmtime(os.path.join(srcPath, filename))))
+                targetLastTime = time.strftime('%Y-%m-%d %X', time.localtime(os.path.getmtime(os.path.join(dirpath, filename))))
+                if hashFile(os.path.join(dirpath, filename)) != hashFile(os.path.join(srcPath, filename)):
+                    #如果文件不同则备份并更新
+                    try:
+                        fileName = filename.split(".")[0]
+                        fileSuffix = filename.split(".")[-1]
+                        #备份文件名
+                        bak = fileName + appendSuffix + fileSuffix
+                        #切换到脚本所在目录
+                        os.chdir(dirpath)
+                        #备份原文件
+                        os.rename(filename, bak)
+                        #复制新的脚本文件到当前目录
+                        shutil.copyfile(os.path.join(srcPath, filename), os.path.join(dirpath, filename))
+                        logger.info("%25s %s %s %s %s", filename, srcLastTime, ">>>>>>", targetLastTime, os.path.join(dirpath, filename))
+                        result += "{:<25s} {:s} >>>>>> {:s} {:s}".format(filename, srcLastTime, targetLastTime, os.path.join(path, filename)) + "<br/>"
+                        successCount += 1
+                    except:
+                        logger.error("update [%s] to 【%s】 failed: %s", filename, gameServer, str(sys.exc_info()[1]))
+                        result += "<font color=\"red\">" + str(sys.exc_info()[0]) + str(sys.exc_info()[1]) + "</font><br/>"                        
+                else:
+                    #文件哈希值一致则只记录一下日志
+                    logger.info("%25s %s %s %s %s", filename, srcLastTime, "======", targetLastTime, os.path.join(dirpath, filename))
+                    result += "{:<25s} {:s} ====== {:s} {:s}<br/>".format(filename, srcLastTime, targetLastTime, os.path.join(dirpath, filename))
+                    successCount += 1
+    return (successCount, result)
 
 class RefreshThread(threading.Thread):
 
@@ -333,7 +448,29 @@ class Agent:
             app = appServerMap.get(id)
             logger.info("update 【%d-%s】 with [%s]", app.id, app.name, fileName)
             result.append((id, app.updateApp(binary)))
-        return (agentIp, result)                             
+        return (agentIp, result)
+
+    def updateScripts(self, appIdList, fileName, binary):
+        '''更新脚本'''
+        result = []
+        logger.info("update scripts %s with [%s]", appIdList, fileName)
+        #先将文件保存到一个以script_时间命名的文件夹中
+        basePath = os.path.join(appPath, "update")
+        folder = os.path.join(basePath, datetime.datetime.now().strftime('script_%Y%m%d_%H%M%S'))
+        os.mkdir(folder)
+        if fileName.endswith(".7z"):
+            f = open(os.path.join(folder, 'scriptToUpdate.7z'), "wb")
+            f.write(binary.data)
+            f.close()
+            # 7z -y -o<输出路径> x "<7z文件绝对路径>" > /dev/null        
+            os.system("7z -y x -o" + folder + " \"" + os.path.join(folder, "scriptToUpdate.7z") + "\" > /dev/null")
+            os.remove(os.path.join(folder, 'scriptToUpdate.7z'))
+        else:
+            f = open(os.path.join(folder, fileName), "wb")
+            f.write(binary.data)
+            f.close()
+        result = wrapperUpdateGameScript(folder, appIdList, False)
+        return (agentIp, result)             
 
 
 if __name__ == '__main__':
@@ -350,6 +487,7 @@ if __name__ == '__main__':
     server.register_function(agent.getConsoleLog, "getConsoleLog")
     server.register_function(agent.switchSyncConfig, "switchSyncConfig")
     server.register_function(agent.updateApps, "updateApps")
+    server.register_function(agent.updateScripts, "updateScripts")
     try:
         server.serve_forever()
     except KeyboardInterrupt:        
