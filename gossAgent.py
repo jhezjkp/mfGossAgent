@@ -13,6 +13,7 @@ import re
 import logging
 import xml.dom.minidom
 import threading
+import base64
 import xmlrpclib
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
@@ -302,18 +303,19 @@ class Agent:
         '''查看控制台日志'''
         gs = appServerMap.get(id)
         if gs is None:
-            return (SERVER_NOT_EXIST,)
+            return (SERVER_NOT_EXIST,base64.b64encode("服务器不存在"))
         else:
-            return (SUCCESS, gs.getLogContent())
+            logContent = gs.getLogContent()
+            return (SUCCESS, base64.b64encode(logContent))
 
 
     def getErrorLog(self, id):
         '''查看错误日志'''
         gs = appServerMap.get(id)
         if gs is None:
-            return (SERVER_NOT_EXIST,)
+            return (SERVER_NOT_EXIST, base64.b64encode("服务器不存在"))
         else:
-            return (SUCCESS, gs.getErrorLog())
+            return (SUCCESS, base64.b64encode(gs.getErrorLog()))
 
     def switchSyncConfig(self, id, configStatus):
         '''切换同步配置'''
