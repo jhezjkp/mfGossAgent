@@ -31,6 +31,8 @@ agentPort = 10190
 #中控配置
 masterIp = None
 masterPort = 9999
+#调用中控的rpc client
+reportor = None
 #应用部署路径
 appPath = os.path.dirname(os.path.abspath(__file__))
 #应用服
@@ -62,14 +64,14 @@ def getProcessIdByAppName(appName):
         pid = int(output)
     return pid
 
-def registerToMaster(client):
+def registerToMaster():
     '''向中控注册本节点监管的所有应用'''     
     apps = []
     for app in appServerMap.values():
         apps.append((app.id, app.name, app.category, app.type, app.status, app.configStatus))        
     while(True):
         try:        
-            client.register(agentIp, agentPort, apps)
+            reportor.register(agentIp, agentPort, apps)
             logger.info("register agent and apps success!!!")
             break
         except:
@@ -97,6 +99,17 @@ def hashFile(filePath):
             sha1obj.update(f.read())
         '''
     return sha1obj.hexdigest()
+
+def getReadableSize(sizeInbyte):
+    '''获取文件大小的友好文字表示'''
+    kb = sizeInbyte / 1024.0
+    if kb < 1024:
+        return '%.2fK' % kb
+    mb = kb / 1024.0
+    if mb < 1024:
+        return '%.2fM' % mb
+    gb = mb / 1024.0
+    return '%.2fG' % gb    
 
 
 def wrapperUpdateGameScript(srcPath, appIdList, isDeleteScript=False):
@@ -195,12 +208,13 @@ class RefreshThread(threading.Thread):
 
     def __init__(self):
         super(RefreshThread, self).__init__()
+        global reportor
         self.logger = logging.getLogger("agent.reportor")
         #确保主线程退出时，本线程也退出        
         self.daemon = True
-        #reportor
-        self.reportor = xmlrpclib.ServerProxy("http://" + masterIp + ":" + str(masterPort), allow_none=True)
-        registerToMaster(self.reportor)
+        #reportor初始化
+        reportor = xmlrpclib.ServerProxy("http://" + masterIp + ":" + str(masterPort), allow_none=True)
+        registerToMaster()
 
     def run(self):
         '''检查系统负载(定时执行，作为心跳包发送给master)'''        
@@ -208,14 +222,45 @@ class RefreshThread(threading.Thread):
             cmd = "cat /proc/loadavg | cut -f1-3 -d ' ' | tr -d '\n'"
             output = subprocess.check_output(["/bin/bash", "-c", cmd])  
             try:                
-                if self.reportor.updateAgentStatus(agentIp, agentPort, output) == AGENT_NOT_REGISTER:
+                if reportor.updateAgentStatus(agentIp, agentPort, output) == AGENT_NOT_REGISTER:
                     self.logger.info("try to register agent and apps...")
-                    registerToMaster(self.reportor)
+                    registerToMaster()
             except:
                 info = sys.exc_info()  
                 self.logger.error(info[1])
                 self.logger.error("updateAgentStatus retry after 30 seconds...")
-            time.sleep(30)                
+            time.sleep(30)        
+
+
+class DatabaseBackupThread(threading.Thread):
+
+    def __init__(self, batchId, appIdList):
+        super(DatabaseBackupThread, self).__init__()
+        self.batchId = batchId
+        self.appIdList = appIdList
+
+    def run(self):
+        '''具体执行数据库备份'''
+        #获取备份目录
+        backupPath = os.path.join(appPath, 'database')   
+        #开始备份数据库       
+        prefix = self.batchId + "_"
+        appendSuffix = '_.sql'  # 默认文件备份后缀
+        for id in self.appIdList:
+            server = appServerMap.get(id)
+            logger.info('备份【' + server.name + '】数据库开始...')
+            fileName = prefix + server.mainDb + appendSuffix
+            cmd = "mysqldump -u" + server.dbUser + " -p'" + server.dbPassword + "' --port=" + str(server.dbPort) + " --skip-lock-tables --default-character-set=utf8 -h " + server.dbHost + " " + server.mainDb + " > " + os.path.join(backupPath, fileName)            
+            logger.info('备份主库...')
+            os.system(cmd)
+            reportor.submitBackupResult(self.batchId, agentIp, id, fileName)
+            fileName = prefix + server.statDb + appendSuffix
+            cmd = "mysqldump -u" + server.dbUser + " -p'" + server.dbPassword + "' --port=" + str(server.dbPort) + " --skip-lock-tables --default-character-set=utf8 -h " + server.dbHost + " " + server.statDb + " > " + os.path.join(backupPath, fileName)
+            logger.info('备份统计库...')
+            os.system(cmd)        
+            reportor.submitBackupResult(self.batchId, agentIp, id, fileName)    
+            logger.info('备份' + server.name + '数据库完毕')
+        return SUCCESS
 
 
 class Agent:
@@ -402,17 +447,6 @@ class Agent:
         return SUCCESS
 
 
-    def changeSyncConfig(self, serverId, status):
-        server = appServerMap.get(serverId)
-        if server is None:
-            return SERVER_NOT_EXIST
-        if server.type != 1:
-            return ILEGAL_OPERATE        
-        cmd = "sed  -i 's/<cleanMode>[0-9]<\/cleanMode>/<cleanMode>" + str(status) + "<\/cleanMode>/' " + os.path.join(os.path.join(server.path, 'conf'), 'game_config.xml')
-        subprocess.check_output(["/bin/bash", "-c", cmd])
-        return SUCCESS
-
-
     def getConsoleLog(self, id):
         '''查看控制台日志'''
         gs = appServerMap.get(id)
@@ -438,6 +472,24 @@ class Agent:
             return SERVER_NOT_EXIST
         else:
             return gs.switchSyncConfig(configStatus)
+
+    def getDatabaseBackupList(self):
+        '''获取数据库备份文件列表'''
+        #获取备份目录
+        backupPath = os.path.join(appPath, 'database')
+        backupFiles = []
+        for f in os.listdir(backupPath):
+            if f == ".gitignore" or f.endswith(".txt"):
+                continue
+            size = getReadableSize(os.path.getsize(os.path.join(backupPath, f)))
+            backupFiles.append((f, size))
+        return backupFiles
+
+    def backupDatabase(self, batchId, appIdList):
+        '''备份应用数据库'''
+        logger.info("backup database for app %s with batchId [%s]", appIdList, batchId)        
+        DatabaseBackupThread(batchId, appIdList).start()        
+        return SUCCESS
 
     def updateApps(self, appIdList, fileName, binary):
         '''更新程序'''
@@ -487,7 +539,9 @@ if __name__ == '__main__':
     server.register_function(agent.getErrorLog, "getErrorLog")
     server.register_function(agent.switchSyncConfig, "switchSyncConfig")
     server.register_function(agent.updateApps, "updateApps")
-    server.register_function(agent.updateScripts, "updateScripts")    
+    server.register_function(agent.updateScripts, "updateScripts")
+    server.register_function(agent.backupDatabase, "backupDatabase")
+    server.register_function(agent.getDatabaseBackupList, "getDatabaseBackupList")
     try:
         server.serve_forever()
     except KeyboardInterrupt:        
