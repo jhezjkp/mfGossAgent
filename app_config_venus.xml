@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config agentPort="10190" masterIp="192.168.1.243" masterPort="9999">	
+    <!-- type 0-网关服 1-登录服 2-游戏服 -->
+	<server id="111" name="腾讯运营活动测试服" category="1" jar="TxSgGame.jar" vindicateJar="TxSgGame_Vindicate.jar" dbHost="192.168.1.243" dbPort="3306" dbUser="root" dbPassword="sg@morefun" mainDb="tx_game" statDb="tx_game_stat" path="/home/tx/game/" type="2"/>
+</config>
