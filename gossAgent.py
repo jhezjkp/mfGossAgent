@@ -203,39 +203,18 @@ class RefreshThread(threading.Thread):
         registerToMaster(self.reportor)
 
     def run(self):
-        '''检查应用当前状态(定时执行)'''        
+        '''检查系统负载(定时执行，作为心跳包发送给master)'''        
         while(True):
-            statusTupleList = []
-            for app in appServerMap.values():
-                status = STATUS_STOP
-                pid = getProcessIdByAppName(app.jar)
-                if pid > 0:
-                    status = STATUS_RUN
-                elif app.type == SERVER_GAME:
-                    #游戏服需要再检查一下是否处于维护模式
-                    pid = getProcessIdByAppName(app.vindicateJar)
-                    if pid > 0:
-                        status = STATUS_VINDICATE
-                app.pid = pid
-                app.status = status
-                #logger.debug("=== 【%s】%d", app.name, app.status)
-                if app.type == SERVER_LOGIN:
-                    #登录服再另外检查一下配置状态
-                    cmd = "sed  -n '/<cleanMode>/p' " + os.path.join(os.path.join(app.path, "conf"), "game_config.xml") + " | sed s/[[:space:]]//g | cut -c 12 | tr -d '\n'"
-                    output = subprocess.check_output(["/bin/bash", "-c", cmd])
-                    if re.match('[0]+', output):
-                        app.configStatus = SYNC_NORMAL
-                    elif re.match('[2]+', output):
-                        app.configStatus = SYNC_SYNC
-                statusTupleList.append((app.id, app.status, app.configStatus))    
+            cmd = "cat /proc/loadavg | cut -f1-3 -d ' ' | tr -d '\n'"
+            output = subprocess.check_output(["/bin/bash", "-c", cmd])  
             try:                
-                if self.reportor.updateAppStatus(agentIp, agentPort, statusTupleList) == AGENT_NOT_REGISTER:
+                if self.reportor.updateAgentStatus(agentIp, agentPort, output) == AGENT_NOT_REGISTER:
                     self.logger.info("try to register agent and apps...")
                     registerToMaster(self.reportor)
             except:
                 info = sys.exc_info()  
                 self.logger.error(info[1])
-                self.logger.error("updateAppStatus retry after 30 seconds...")
+                self.logger.error("updateAgentStatus retry after 30 seconds...")
             time.sleep(30)                
 
 
@@ -309,12 +288,32 @@ class Agent:
         refreshThread.start()
 
 
-    def getAppList(self):
-        '''获取应用信息'''        
-        appList = []
+    def getAppStatusList(self):
+        '''获取应用状态信息'''        
+        statusTupleList = []
         for app in appServerMap.values():
-            appList.append((app.id, app.name, app.category, app.type, app.status))
-        return appList
+            status = STATUS_STOP
+            pid = getProcessIdByAppName(app.jar)
+            if pid > 0:
+                status = STATUS_RUN
+            elif app.type == SERVER_GAME:
+                #游戏服需要再检查一下是否处于维护模式
+                pid = getProcessIdByAppName(app.vindicateJar)
+                if pid > 0:
+                    status = STATUS_VINDICATE
+            app.pid = pid
+            app.status = status
+            #logger.debug("=== 【%s】%d", app.name, app.status)
+            if app.type == SERVER_LOGIN:
+                #登录服再另外检查一下配置状态
+                cmd = "sed  -n '/<cleanMode>/p' " + os.path.join(os.path.join(app.path, "conf"), "game_config.xml") + " | sed s/[[:space:]]//g | cut -c 12 | tr -d '\n'"
+                output = subprocess.check_output(["/bin/bash", "-c", cmd])
+                if re.match('[0]+', output):
+                    app.configStatus = SYNC_NORMAL
+                elif re.match('[2]+', output):
+                    app.configStatus = SYNC_SYNC
+            statusTupleList.append((app.id, app.status, app.configStatus, app.error))         
+        return statusTupleList
              
 
     def startApp(self, id):
@@ -480,14 +479,15 @@ if __name__ == '__main__':
     agent = Agent()
     server = SimpleXMLRPCServer(("0.0.0.0", agentPort), allow_none=True, logRequests=False)
     logger.info("Listening on port %d...", agentPort)
-    server.register_function(agent.getAppList, "getAppList")
+    server.register_function(agent.getAppStatusList, "getAppStatusList")
     server.register_function(agent.startApp, "startApp")
     server.register_function(agent.stopApp, "stopApp")
     server.register_function(agent.vindicate, "vindicate")
     server.register_function(agent.getConsoleLog, "getConsoleLog")
+    server.register_function(agent.getErrorLog, "getErrorLog")
     server.register_function(agent.switchSyncConfig, "switchSyncConfig")
     server.register_function(agent.updateApps, "updateApps")
-    server.register_function(agent.updateScripts, "updateScripts")
+    server.register_function(agent.updateScripts, "updateScripts")    
     try:
         server.serve_forever()
     except KeyboardInterrupt:        
