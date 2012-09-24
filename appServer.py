@@ -9,7 +9,7 @@ import logging
 
 import pyinotify
 
-from constants import *
+from constants import SERVER_GAME, SERVER_LOGIN, SUCCESS, FAIL, ILEGAL_OPERATE
 
 '''
 应用服相关
@@ -90,7 +90,7 @@ class AppServer:
         '''获取控制台日志内容'''
         logContent = self.logWatcher.getLogContent()
         if len(logContent) == 0 and self.pid <= 0:
-            return 'the server is stoped'            
+            return 'the server is stoped'
         else:
             return logContent
 
@@ -104,12 +104,12 @@ class AppServer:
         '''更新应用'''
         result = SUCCESS
         try:
-            #先备份原程序        
+            #先备份原程序
             appendSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S.')  # 默认文件备份后缀
             fileName = self.jar.split(".")[0]
             fileSuffix = self.jar.split(".")[-1]
-            bak = fileName + appendSuffix + fileSuffix        
-            os.rename(os.path.join(self.path, self.jar), os.path.join(self.path, bak))        
+            bak = fileName + appendSuffix + fileSuffix
+            os.rename(os.path.join(self.path, self.jar), os.path.join(self.path, bak))
             f = open(os.path.join(self.path, self.jar), "wb")
             f.write(binary.data)
             f.close()
@@ -117,7 +117,7 @@ class AppServer:
             result = FAIL
             self.logger.error("update app for 【%s】 failed: %s", self.name, str(sys.exc_info()[1]))
         return result
-        
+
 
 ###################################
 
@@ -165,7 +165,7 @@ class ModificationsHandler(pyinotify.ProcessEvent):
 
     def reset(self):
         self.content = ""
-        self.offset = 0        
+        self.offset = 0
         subprocess.Popen('cat /dev/null > ' + self.logFile, cwd=os.path.dirname(self.logFile), stdout=None, shell=True)
         self.log = open(self.logFile, 'r')
 

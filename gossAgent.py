@@ -9,7 +9,6 @@ import sys
 import time
 import datetime
 import subprocess
-import socket
 import re
 import logging
 import xml.dom.minidom
@@ -20,13 +19,11 @@ import shutil
 import xmlrpclib
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
-import zerorpc
-
 from appServer import AppServer
-from constants import *
+from constants import SERVER_LOGIN, SERVER_GAME, AGENT_NOT_REGISTER, STATUS_RUN, STATUS_STOP, STATUS_VINDICATE, SUCCESS, SYNC_NORMAL, SYNC_SYNC, SERVER_NOT_EXIST, ILEGAL_OPERATE
 
 #本地ip和监听端口
-agentIp = subprocess.check_output(["/bin/bash", "-c", "/sbin/ifconfig"]).split("\n")[1].split()[1][5:]   
+agentIp = subprocess.check_output(["/bin/bash", "-c", "/sbin/ifconfig"]).split("\n")[1].split()[1][5:]
 agentPort = 10190
 #中控配置
 masterIp = None
@@ -42,18 +39,20 @@ appPath = os.path.dirname(os.path.abspath(__file__))
 #定时刷新应用状态的线程
 refreshThread = None
 
+
 def initLogger():
     '''初始化日志配置'''
     logger = logging.getLogger("agent")
     fileHandler = logging.FileHandler('agent.log')
     streamHandler = logging.StreamHandler()
     fmt = logging.Formatter("%(asctime)s, %(message)s")
-    fileHandler.setFormatter(fmt)    
+    fileHandler.setFormatter(fmt)
     streamHandler.setFormatter(fmt)
     logger.setLevel(logging.DEBUG)
     logger.addHandler(fileHandler)
     logger.addHandler(streamHandler)
     return logger
+
 
 def getProcessIdByAppName(appName):
     '''根据应用名来获取程序的进程编号'''
@@ -64,18 +63,19 @@ def getProcessIdByAppName(appName):
         pid = int(output)
     return pid
 
+
 def registerToMaster():
-    '''向中控注册本节点监管的所有应用'''     
+    '''向中控注册本节点监管的所有应用'''
     apps = []
     for app in appServerMap.values():
-        apps.append((app.id, app.name, app.category, app.type, app.status, app.configStatus))        
+        apps.append((app.id, app.name, app.category, app.type, app.status, app.configStatus))
     while(True):
-        try:        
+        try:
             reportor.register(agentIp, agentPort, apps)
             logger.info("register agent and apps success!!!")
             break
         except:
-            info = sys.exc_info()            
+            info = sys.exc_info()
             logger.error(info[1])
             logger.error("registerToMaster retry after 30 seconds...")
             time.sleep(30)
@@ -100,6 +100,7 @@ def hashFile(filePath):
         '''
     return sha1obj.hexdigest()
 
+
 def getReadableSize(sizeInbyte):
     '''获取文件大小的友好文字表示'''
     kb = sizeInbyte / 1024.0
@@ -109,7 +110,7 @@ def getReadableSize(sizeInbyte):
     if mb < 1024:
         return '%.2fM' % mb
     gb = mb / 1024.0
-    return '%.2fG' % gb    
+    return '%.2fG' % gb
 
 
 def wrapperUpdateGameScript(srcPath, appIdList, isDeleteScript=False):
@@ -135,7 +136,7 @@ def wrapperUpdateGameScript(srcPath, appIdList, isDeleteScript=False):
         gs = appServerMap[id]
         log = "----------- 更新【" + gs.name + "】脚本 ---------------"
         logger.info(log)
-        logs += log + "<br/>" 
+        logs += log + "<br/>"
         updateResult = updateScript(srcPath, scripts, gs.name, os.path.join(gs.path, 'data'), appendSuffix)
         result.append((id, len(scripts), updateResult[0]))
         logs += updateResult[1]
@@ -154,7 +155,7 @@ def wrapperUpdateGameScript(srcPath, appIdList, isDeleteScript=False):
     log = "============= 脚本更新完成 ==============="
     logger.info(log)
     logs += log
-    #响应格式：([(应用编号, 需要更新的脚本数, 成功更新的脚本数),], 更新日志)    
+    #响应格式：([(应用编号, 需要更新的脚本数, 成功更新的脚本数),], 更新日志)
     return (result, logs)
 
 
@@ -196,7 +197,7 @@ def updateScript(srcPath, scripts, gameServer, path, appendSuffix):
                         successCount += 1
                     except:
                         logger.error("update [%s] to 【%s】 failed: %s", filename, gameServer, str(sys.exc_info()[1]))
-                        result += "<font color=\"red\">" + str(sys.exc_info()[0]) + str(sys.exc_info()[1]) + "</font><br/>"                        
+                        result += "<font color=\"red\">" + str(sys.exc_info()[0]) + str(sys.exc_info()[1]) + "</font><br/>"
                 else:
                     #文件哈希值一致则只记录一下日志
                     logger.info("%25s %s %s %s %s", filename, srcLastTime, "======", targetLastTime, os.path.join(dirpath, filename))
@@ -204,32 +205,33 @@ def updateScript(srcPath, scripts, gameServer, path, appendSuffix):
                     successCount += 1
     return (successCount, result)
 
+
 class RefreshThread(threading.Thread):
 
     def __init__(self):
         super(RefreshThread, self).__init__()
         global reportor
         self.logger = logging.getLogger("agent.reportor")
-        #确保主线程退出时，本线程也退出        
+        #确保主线程退出时，本线程也退出
         self.daemon = True
         #reportor初始化
         reportor = xmlrpclib.ServerProxy("http://" + masterIp + ":" + str(masterPort), allow_none=True)
         registerToMaster()
 
     def run(self):
-        '''检查系统负载(定时执行，作为心跳包发送给master)'''        
+        '''检查系统负载(定时执行，作为心跳包发送给master)'''
         while(True):
             cmd = "cat /proc/loadavg | cut -f1-3 -d ' ' | tr -d '\n'"
-            output = subprocess.check_output(["/bin/bash", "-c", cmd])  
-            try:                
+            output = subprocess.check_output(["/bin/bash", "-c", cmd])
+            try:
                 if reportor.updateAgentStatus(agentIp, agentPort, output) == AGENT_NOT_REGISTER:
                     self.logger.info("try to register agent and apps...")
                     registerToMaster()
             except:
-                info = sys.exc_info()  
+                info = sys.exc_info()
                 self.logger.error(info[1])
                 self.logger.error("updateAgentStatus retry after 30 seconds...")
-            time.sleep(30)        
+            time.sleep(30)
 
 
 class DatabaseBackupThread(threading.Thread):
@@ -242,23 +244,23 @@ class DatabaseBackupThread(threading.Thread):
     def run(self):
         '''具体执行数据库备份'''
         #获取备份目录
-        backupPath = os.path.join(appPath, 'database')   
-        #开始备份数据库       
+        backupPath = os.path.join(appPath, 'database')
+        #开始备份数据库
         prefix = self.batchId + "_"
         appendSuffix = '_.sql'  # 默认文件备份后缀
         for id in self.appIdList:
             server = appServerMap.get(id)
             logger.info('备份【' + server.name + '】数据库开始...')
             fileName = prefix + server.mainDb + appendSuffix
-            cmd = "mysqldump -u" + server.dbUser + " -p'" + server.dbPassword + "' --port=" + str(server.dbPort) + " --skip-lock-tables --default-character-set=utf8 -h " + server.dbHost + " " + server.mainDb + " > " + os.path.join(backupPath, fileName)            
+            cmd = "mysqldump -u" + server.dbUser + " -p'" + server.dbPassword + "' --port=" + str(server.dbPort) + " --skip-lock-tables --default-character-set=utf8 -h " + server.dbHost + " " + server.mainDb + " > " + os.path.join(backupPath, fileName)
             logger.info('备份主库...')
             os.system(cmd)
             reportor.submitBackupResult(self.batchId, agentIp, id, fileName)
             fileName = prefix + server.statDb + appendSuffix
             cmd = "mysqldump -u" + server.dbUser + " -p'" + server.dbPassword + "' --port=" + str(server.dbPort) + " --skip-lock-tables --default-character-set=utf8 -h " + server.dbHost + " " + server.statDb + " > " + os.path.join(backupPath, fileName)
             logger.info('备份统计库...')
-            os.system(cmd)        
-            reportor.submitBackupResult(self.batchId, agentIp, id, fileName)    
+            os.system(cmd)
+            reportor.submitBackupResult(self.batchId, agentIp, id, fileName)
             logger.info('备份' + server.name + '数据库完毕')
         return SUCCESS
 
@@ -267,14 +269,14 @@ class Agent:
     '''管理代理'''
 
     def __init__(self):
-        '''应用配置'''        
+        '''应用配置'''
         global agentPort, masterIp, masterPort, appServerMap, timer, refreshThread
         hostname = subprocess.check_output(["/bin/bash", "-c", "hostname | tr -d '\n'"])
         config = "app_config_" + hostname + ".xml"
         logger.info("load config from " + config)
         dom = xml.dom.minidom.parse(config)
         root = dom.documentElement
-        agentPort = int(root.getAttribute('agentPort'))       
+        agentPort = int(root.getAttribute('agentPort'))
         masterIp = root.getAttribute('masterIp')
         masterPort = int(root.getAttribute('masterPort'))
         for node in root.getElementsByTagName('server'):
@@ -332,9 +334,8 @@ class Agent:
         refreshThread = RefreshThread()
         refreshThread.start()
 
-
     def getAppStatusList(self):
-        '''获取应用状态信息'''        
+        '''获取应用状态信息'''
         statusTupleList = []
         for app in appServerMap.values():
             status = STATUS_STOP
@@ -357,9 +358,8 @@ class Agent:
                     app.configStatus = SYNC_NORMAL
                 elif re.match('[2]+', output):
                     app.configStatus = SYNC_SYNC
-            statusTupleList.append((app.id, app.status, app.configStatus, app.error))         
+            statusTupleList.append((app.id, app.status, app.configStatus, app.error))
         return statusTupleList
-             
 
     def startApp(self, id):
         '''启动应用'''
@@ -388,14 +388,13 @@ class Agent:
                     server.start()
             return SUCCESS
 
-
     def stopApp(self, id):
         '''停止应用'''
         server = appServerMap.get(id)
         if server is None:
             return SERVER_NOT_EXIST
         else:
-            if server.type != 2:                
+            if server.type != 2:
                 #检查应用当前状态
                 status = 0
                 pid = getProcessIdByAppName(server.jar)
@@ -406,7 +405,7 @@ class Agent:
                 server.pid = pid
                 server.status = status
                 return SUCCESS
-            else:               
+            else:
                 #检查应用当前状态
                 status = 0
                 pid = getProcessIdByAppName(server.jar)
@@ -420,8 +419,7 @@ class Agent:
                     status = 2
                 server.pid = pid
                 server.status = status
-                return SUCCESS 
-
+                return SUCCESS
 
     def vindicate(self, id):
         '''维护游戏服'''
@@ -442,20 +440,18 @@ class Agent:
         server.status = status
         if status == 1 or status == 2:
             #游戏服还在运行或已运行了一个维护程序实例
-            return ILEGAL_OPERATE        
+            return ILEGAL_OPERATE
         server.vindicate()
         return SUCCESS
-
 
     def getConsoleLog(self, id):
         '''查看控制台日志'''
         gs = appServerMap.get(id)
         if gs is None:
-            return (SERVER_NOT_EXIST,base64.b64encode("服务器不存在"))
+            return (SERVER_NOT_EXIST, base64.b64encode("服务器不存在"))
         else:
             logContent = gs.getLogContent()
             return (SUCCESS, base64.b64encode(logContent))
-
 
     def getErrorLog(self, id):
         '''查看错误日志'''
@@ -487,8 +483,8 @@ class Agent:
 
     def backupDatabase(self, batchId, appIdList):
         '''备份应用数据库'''
-        logger.info("backup database for app %s with batchId [%s]", appIdList, batchId)        
-        DatabaseBackupThread(batchId, appIdList).start()        
+        logger.info("backup database for app %s with batchId [%s]", appIdList, batchId)
+        DatabaseBackupThread(batchId, appIdList).start()
         return SUCCESS
 
     def updateApps(self, appIdList, fileName, binary):
@@ -513,7 +509,7 @@ class Agent:
             f = open(os.path.join(folder, 'scriptToUpdate.7z'), "wb")
             f.write(binary.data)
             f.close()
-            # 7z -y -o<输出路径> x "<7z文件绝对路径>" > /dev/null        
+            # 7z -y -o<输出路径> x "<7z文件绝对路径>" > /dev/null
             os.system("7z -y x -o" + folder + " \"" + os.path.join(folder, "scriptToUpdate.7z") + "\" > /dev/null")
             os.remove(os.path.join(folder, 'scriptToUpdate.7z'))
         else:
@@ -521,13 +517,13 @@ class Agent:
             f.write(binary.data)
             f.close()
         result = wrapperUpdateGameScript(folder, appIdList, False)
-        return (agentIp, result)             
+        return (agentIp, result)
 
 
 if __name__ == '__main__':
     reload(sys)
-    sys.setdefaultencoding("utf-8")    
-    logger = initLogger()    
+    sys.setdefaultencoding("utf-8")
+    logger = initLogger()
     agent = Agent()
     server = SimpleXMLRPCServer(("0.0.0.0", agentPort), allow_none=True, logRequests=False)
     logger.info("Listening on port %d...", agentPort)
@@ -544,5 +540,5 @@ if __name__ == '__main__':
     server.register_function(agent.getDatabaseBackupList, "getDatabaseBackupList")
     try:
         server.serve_forever()
-    except KeyboardInterrupt:        
+    except KeyboardInterrupt:
         logger.info("agent exit...")
