@@ -13,3 +13,13 @@ Goss Agent is the agent part of the Goss(Game Operation Support System), which e
 + database backup
 + agents status view support
 + the agent support self update and restart
+
+#Get started
+
+---
+
+<code>
+ $ pip install -r requirements.txt
+
+ $ sh start.sh
+</code>
