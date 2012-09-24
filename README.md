@@ -16,10 +16,7 @@ Goss Agent is the agent part of the Goss(Game Operation Support System), which e
 
 #Get started
 
----
+------
 
-<code>
- $ pip install -r requirements.txt
-
- $ sh start.sh
-</code>
+    $ pip install -r requirements.txt
+    $ sh start.sh
