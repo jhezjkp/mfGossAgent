@@ -20,7 +20,7 @@ import xmlrpclib
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
 from appServer import AppServer
-from constants import SERVER_LOGIN, SERVER_GAME, AGENT_NOT_REGISTER, STATUS_RUN, STATUS_STOP, STATUS_VINDICATE, SUCCESS, SYNC_NORMAL, SYNC_SYNC, SERVER_NOT_EXIST, ILEGAL_OPERATE
+from constants import APP_VERSION, NEED_UPDATE, SERVER_LOGIN, SERVER_GAME, AGENT_NOT_REGISTER, STATUS_RUN, STATUS_STOP, STATUS_VINDICATE, SUCCESS, SYNC_NORMAL, SYNC_SYNC, SERVER_NOT_EXIST, ILEGAL_OPERATE
 
 #本地ip和监听端口
 agentIp = subprocess.check_output(["/bin/bash", "-c", "/sbin/ifconfig"]).split("\n")[1].split()[1][5:]
@@ -71,8 +71,17 @@ def registerToMaster():
         apps.append((app.id, app.name, app.category, app.type, app.status, app.configStatus))
     while(True):
         try:
-            reportor.register(agentIp, agentPort, apps)
-            logger.info("register agent and apps success!!!")
+            if reportor.register(agentIp, agentPort, APP_VERSION, apps) == NEED_UPDATE:
+                #程序需要进行更新
+                os.chdir(appPath)
+                output = subprocess.check_output(["/bin/bash", "-c", os.path.join(appPath, "check.sh"), appPath])
+                if output.endswith("merged updates\n"):
+                    args = sys.argv[:]
+                    args.insert(0, sys.executable)
+                    os.execv(sys.executable, args)
+                    sys.exit(0)
+            else:
+                logger.info("register agent and apps success!!!")
             break
         except:
             info = sys.exc_info()
