@@ -244,6 +244,7 @@ class RefreshThread(threading.Thread):
 
 
 class DatabaseBackupThread(threading.Thread):
+    '''数据库备份线程'''
 
     def __init__(self, batchId, appIdList):
         super(DatabaseBackupThread, self).__init__()
@@ -255,8 +256,8 @@ class DatabaseBackupThread(threading.Thread):
         #获取备份目录
         backupPath = os.path.join(appPath, 'database')
         #开始备份数据库
-        prefix = self.batchId + "_"
-        appendSuffix = '_.sql'  # 默认文件备份后缀
+        prefix = self.batchId + "_" #文件备份前缀
+        appendSuffix = '_.sql'  #文件备份后缀
         for id in self.appIdList:
             server = appServerMap.get(id)
             logger.info('备份【' + server.name + '】数据库开始...')
