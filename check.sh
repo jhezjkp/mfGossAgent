@@ -15,7 +15,7 @@ newUpdatesAvailable=`git diff HEAD FETCH_HEAD`
 if [ "$newUpdatesAvailable" != "" ]
 then
     #check if the fallback branch exists
-    if [ `git branch | grep fallbacks` != "" ]; then
+    if [ "`git branch | grep fallbacks`"x != ""x ]; then
         echo "fallbacks branch exits"
         git checkout fallbacks
         git merge master
