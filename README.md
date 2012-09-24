@@ -1,4 +1,4 @@
-#GossAgent
+#GossAgent[![Build Status](https://secure.travis-ci.org/jhezjkp/mfGossAgent.png)](http://travis-ci.org/jhezjkp/mfGossAgent)
 
 Goss Agent is the agent part of the Goss(Game Operation Support System), which enables people manage their game servers easier.
 
