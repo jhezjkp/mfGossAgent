@@ -16,7 +16,8 @@ Goss Agent is the agent part of the Goss(Game Operation Support System), which e
 
 #Get started
 
-------
-
+    $ git clone https://github.com/jhezjkp/mfGossAgent.git
+    $ cd mfGossAgent
+    $ mkvirtualenv mfGossAgent  #you should have [virtualenv](http://www.virtualenv.org "virtualenv") and [virtualenvwrapper](http://virtualenvwrapper.readthedocs.org/en/latest/index.html "virtualenvwrapper") installed on your system
     $ pip install -r requirements.txt
     $ sh start.sh
