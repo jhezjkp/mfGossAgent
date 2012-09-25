@@ -98,6 +98,8 @@ class AppServer:
         '''获取错误日志'''
         cmd = "grep -B 5 -A 30 'Exception' " + os.path.join(self.path, 'app.out')
         output = subprocess.check_output(["/bin/bash", "-c", cmd])
+        if len(output) == 0:
+            self.error = False
         return output
 
     def updateApp(self, binary):
@@ -150,6 +152,7 @@ class ModificationsHandler(pyinotify.ProcessEvent):
             self.log.seek(self.offset)
         else:
             self.content = ""
+            self.appServer.error = False
             self.offset = 0
             self.log.seek(0)
         for line in self.log.readlines():
