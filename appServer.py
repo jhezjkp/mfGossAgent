@@ -159,7 +159,7 @@ class ModificationsHandler(pyinotify.ProcessEvent):
                 if line.find('Exception') > -1:
                     self.appServer.error = True
         #只保留最新的一段日志
-        index = self.content.find('<br/>', 50000)
+        index = self.content.find('<br/>', 36000)
         if index > 0:
             self.content = self.content[0:index + 5]
         self.offset = self.log.tell()
