@@ -1,4 +1,4 @@
-#GossAgent
+#GossAgent [![Build Status](https://secure.travis-ci.org/jhezjkp/mfGossAgent.png)](http://travis-ci.org/jhezjkp/mfGossAgent) [![endorse](http://api.coderwall.com/jhezjkp/endorsecount.png)](http://coderwall.com/jhezjkp)
 
 Goss Agent is the agent part of the Goss(Game Operation Support System), which enables people manage their game servers easier.
 
@@ -12,7 +12,7 @@ Goss Agent is the agent part of the Goss(Game Operation Support System), which e
 + configurations switch
 + database backup
 + agents status view support
-+ the agent support self update and restart
++ the agent supports self update and restart
 
 #Get started
 
