@@ -280,12 +280,16 @@ class Agent:
 
     def __init__(self):
         '''应用配置'''
-        global agentPort, masterIp, masterPort, appServerMap, timer, refreshThread
+        global agentIp, agentPort, masterIp, masterPort, appServerMap, timer, refreshThread
         hostname = subprocess.check_output(["/bin/bash", "-c", "hostname | tr -d '\n'"])
         config = "app_config_" + hostname + ".xml"
         logger.info("load config from " + config)
         dom = xml.dom.minidom.parse(config)
         root = dom.documentElement
+        theIp = root.getAttribute('agentIp')
+        if theIp and len(theIp.strip()) > 6:
+            logger.info("======= override agent ip to %s", theIp)
+            agentIp = theIp
         agentPort = int(root.getAttribute('agentPort'))
         masterIp = root.getAttribute('masterIp')
         masterPort = int(root.getAttribute('masterPort'))
