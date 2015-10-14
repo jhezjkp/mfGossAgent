@@ -14,6 +14,12 @@ Goss Agent is the agent part of the Goss(Game Operation Support System), which e
 + agents status view support
 + the agent supports self update and restart
 
+#Screenshots
+
+![Index Page](https://raw.githubusercontent.com/jhezjkp/mfGossMaster/master/screenshot/index.png)
+![Agent status](https://raw.githubusercontent.com/jhezjkp/mfGossMaster/master/screenshot/agentStatus.png)
+![Console log realtime monit](https://raw.githubusercontent.com/jhezjkp/mfGossMaster/master/screenshot/consoleWall.png)
+
 #Get started
 
 You should have [virtualenv](http://www.virtualenv.org "virtualenv") and [virtualenvwrapper](http://virtualenvwrapper.readthedocs.org/en/latest/index.html "virtualenvwrapper") installed on your system before you start.
